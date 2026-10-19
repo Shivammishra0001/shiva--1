@@ -1,0 +1,3 @@
+openai, anthropic, huggingface, nvidia, deepseek: Simple Icons (CC0 1.0), https://simpleicons.org
+sarvam.svg: Sarvam AI brand asset, https://assets.sarvam.ai/assets/brand/logos/sarvam-logo-black.svg
+Trademarks belong to their owners. They show the AI ecosystem the cohorts cover and do not imply affiliation or endorsement.

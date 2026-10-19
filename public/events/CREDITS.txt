@@ -1,0 +1,9 @@
+Event cover photos are real, openly licensed photographs from Wikimedia Commons.
+They illustrate each event type and are not photos of this co-working space's own events.
+
+workshop.jpg  - "Wikimania 2026. Le Loft (01594)", Francesco Tosoni, CC BY-SA 4.0
+lab.jpg       - "Work in the computer lab", MCPearson, CC BY-SA 3.0
+research.jpg  - "Panel discussion on stage - Wikimania 2026 - Paris", Jorge Jaramillo, CC BY-SA 4.0
+meetup.jpg    - "Tom Kristian Abel pitching at Fellin Hakk hackathon 2026", Maido Parv, CC BY-SA 4.0
+webinar.jpg   - "Wikimania 2014 - Day 1 - Hackathon participants 05", Gaelle Berton, CC BY-SA 3.0
+cohort.jpg    - "Large lecture hall at Brown University", Kenneth C. Zirkel, CC BY-SA 4.0
