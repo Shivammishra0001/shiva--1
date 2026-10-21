@@ -2,7 +2,7 @@ import Detail from './community/Detail'
 import Directory from './community/Directory'
 import { EventModal, EventsExplorer } from './community/Events'
 import { CommunityRow, HostCTA, Hero } from './community/Home'
-import { AuthDialog, SmartLink, ToastHost } from './community/ui'
+import { AgreementDialog, AuthDialog, SmartLink, ToastHost, WelcomeDialog } from './community/ui'
 import { useParams } from '../lib/community'
 
 // One Community page.
@@ -28,6 +28,8 @@ export default function CommunityApp() {
       )}
       <EventModal />
       <AuthDialog />
+      <AgreementDialog />
+      <WelcomeDialog />
       <ToastHost />
     </>
   )

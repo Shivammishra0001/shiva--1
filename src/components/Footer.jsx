@@ -53,6 +53,7 @@ export default function Footer() {
       </div>
       <div className="container footer__legal">
         <p style={{ textAlign: 'center' }}>{site.copyright}</p>
+        <p style={{ textAlign: 'center' }}><a href="/legal.html?doc=terms">Terms</a> · <a href="/legal.html?doc=privacy">Privacy</a> · <a href="/legal.html?doc=guidelines">Community Guidelines</a></p>
       </div>
     </footer>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { api, closeSignIn, navigate, pageBase, toast, useAuthPrompt, useToasts } from '../../lib/community'
+import { api, closeAgreement, closeSignIn, closeWelcome, navigate, pageBase, toast, useAgreement, useAuthPrompt, useToasts, useWelcome } from '../../lib/community'
 
 const P = {
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
@@ -196,6 +196,101 @@ export function AuthDialog() {
         </div>
       </form>
     </Dialog>
+  )
+}
+
+// Report content: pick a reason, add an optional note. The reporter's identity is never shown to other members.
+const REASONS = [
+  ['harassment_threats', 'Harassment or threats'], ['hate_abuse', 'Hate or targeted abuse'], ['privacy', 'Privacy violation or doxxing'], ['spam_scam', 'Spam or scam'],
+  ['malicious', 'Malicious content'], ['sexual_exploitation', 'Sexual exploitation or prohibited imagery'], ['copyright', 'Copyright concern'], ['other', 'Other policy violation'],
+]
+export function ReportDialog({ target, onClose }) {
+  const [reason, setReason] = useState('')
+  const [details, setDetails] = useState('')
+  const [state, setState] = useState({ busy: false, error: '', done: null })
+  useEffect(() => { setReason(''); setDetails(''); setState({ busy: false, error: '', done: null }) }, [target])
+  const submit = async (e) => {
+    e.preventDefault()
+    setState({ busy: true, error: '', done: null })
+    try { const r = await api.report({ contentType: target.type, contentId: target.id, reason, details }); setState({ busy: false, error: '', done: r }) } catch (err) { setState({ busy: false, error: err.message, done: null }) }
+  }
+  return (
+    <Dialog open={!!target} onClose={onClose} title={state.done ? 'Report sent' : 'Report this content'} description={state.done ? undefined : 'Tell us what is wrong. A person will review it. Your name is not shown to the author or other members.'}>
+      {state.done ? (
+        <>
+          <p>{state.done.message}</p>
+          <div className="cm-dialog__row"><button type="button" className="cm-btn cm-btn--primary" onClick={onClose}>Done</button></div>
+        </>
+      ) : (
+        <form onSubmit={submit} className="cm-reportform">
+          <fieldset><legend className="sr-only">Reason</legend>
+            {REASONS.map(([id, label]) => <label key={id}><input type="radio" name="reason" value={id} checked={reason === id} onChange={() => setReason(id)} /> {label}</label>)}
+          </fieldset>
+          <label className="cm-field">Anything we should know? (optional)
+            <textarea rows={3} maxLength={500} value={details} onChange={(e) => setDetails(e.target.value)} placeholder="Keep it short. Please don’t include other people’s private details." /></label>
+          {state.error && <p role="alert" className="cm-err">{state.error}</p>}
+          <div className="cm-dialog__row">
+            <button type="button" className="cm-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="cm-btn cm-btn--primary" disabled={!reason || state.busy}>{state.busy && <Spinner />}Send report</button>
+          </div>
+        </form>
+      )}
+    </Dialog>
+  )
+}
+
+// Shown before a join completes: the member reads the house rules and agrees to them.
+export function AgreementDialog() {
+  const a = useAgreement()
+  const [ok, setOk] = useState(false)
+  useEffect(() => { setOk(false) }, [a])
+  const agree = () => { const then = a.then; closeAgreement(); then() }
+  return (
+    <Dialog open={!!a} onClose={closeAgreement} title="Before you join" description={a ? `Please read and agree to the ${a.community.name} community guidelines.` : undefined}>
+      {a && (
+        <>
+          <ol className="cm-agree__rules">{a.community.rules.map((r) => <li key={r}>{r}</li>)}</ol>
+          <label className="cm-agree__check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> I have read the guidelines and agree to follow them.</label>
+          <div className="cm-dialog__row">
+            <button type="button" className="cm-ghost" onClick={closeAgreement}>Not now</button>
+            <button type="button" className="cm-btn cm-btn--primary" onClick={agree} disabled={!ok}>Agree and join</button>
+          </div>
+        </>
+      )}
+    </Dialog>
+  )
+}
+
+// Friendly confirmation after a successful join (never shown for errors).
+export function WelcomeDialog() {
+  const w = useWelcome()
+  const ref = useRef(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (w && !el.open) el.showModal()
+    if (!w && el.open) el.close()
+  }, [w])
+  const first = w?.name?.trim().split(/\s+/)[0]
+  return (
+    <dialog ref={ref} className="cm-welcome" aria-labelledby="cm-welcome-t" onClose={closeWelcome} onClick={(e) => e.target === ref.current && closeWelcome()}>
+      {w && (
+        <div className="cm-welcome__box" style={{ '--acc': w.community.accent }}>
+          <span className="cm-welcome__burst" aria-hidden="true" />
+          <span className="cm-welcome__check" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          </span>
+          <h2 id="cm-welcome-t">{first ? `You’re in, ${first}!` : 'You’re in!'}</h2>
+          <p className="cm-welcome__lead">Thanks for joining the <b>{w.community.name}</b> community. We’re glad you’re here.</p>
+          <ul className="cm-welcome__tips">
+            <li>Say hello on the blog and tell us what you’re building.</li>
+            <li>Ask questions. Someone here has hit the same wall.</li>
+            <li>Watch for workshops and talks in the Events tab.</li>
+          </ul>
+          <button type="button" className="cm-btn cm-btn--primary" onClick={closeWelcome} autoFocus>Start exploring</button>
+        </div>
+      )}
+    </dialog>
   )
 }
 

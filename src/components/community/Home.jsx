@@ -14,14 +14,14 @@ const COLS = [
     { img: '/images/about-why.jpg', pos: '50% 40%', chips: ['cloud', 'quantum'] },
   ],
   [
-    { poster: 'neo4j' },
-    { img: '/images/about-hero.jpg', pos: '30% 50%', chips: ['neo4j'] },
-    { img: '/images/coworking-hero.jpg', pos: '88% 50%', chips: ['cybersecurity'] },
+    { poster: 'ai-governance' },
+    { img: '/images/about-hero.jpg', pos: '30% 50%', chips: ['ai-governance'] },
+    { img: '/images/coworking-hero.jpg', pos: '88% 50%', chips: ['cloud'] },
   ],
   [
     { img: '/images/about-hero.jpg', pos: '82% 50%', chips: ['quantum', 'ai'] },
     { poster: 'cloud' },
-    { poster: 'cybersecurity' },
+    { poster: 'quantum' },
   ],
 ]
 
@@ -89,7 +89,7 @@ export function Hero() {
 }
 
 // Row order; anything missing from the data is skipped.
-const ROW = ['ai', 'cybersecurity', 'neo4j', 'quantum', 'cloud']
+const ROW = ['ai', 'ai-governance', 'quantum', 'cloud']
 
 export function CommunityRow() {
   const items = ROW.map((id) => communities.find((c) => c.id === id)).filter(Boolean)

@@ -4,6 +4,7 @@ import './index.css'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import BookingModal from './components/BookingModal'
+import MemberGate from './member/Gate'
 import CohortApp from './components/CohortApp'
 
 // Separate page (cohort.html): one page per technology cohort, opened straight from the menu.
@@ -13,7 +14,7 @@ function App() {
     <>
       <a className="skip-link" href="#main">Skip to content</a>
       <Navbar onBook={() => setBooking(true)} />
-      <main id="main" className="cm-pagemain"><CohortApp onBook={() => setBooking(true)} /></main>
+      <main id="main" className="cm-pagemain"><MemberGate><CohortApp onBook={() => setBooking(true)} /></MemberGate></main>
       <Footer />
       <BookingModal open={booking} onClose={() => setBooking(false)} />
     </>

@@ -1,3 +1,4 @@
 Official brand marks from Simple Icons (CC0 1.0), https://simpleicons.org
 neo4j.svg, pytorch.svg, owasp.svg, qiskit.svg, kubernetes.svg
 Trademarks belong to their owners. They identify each technology topic only and do not imply affiliation or endorsement.
+scale.svg: Lucide "scale" icon (ISC licence), https://lucide.dev. AI governance has no brand mark, so a neutral icon is used.

@@ -1,11 +1,12 @@
 import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { adminApi } from './server/vite-plugin.js'
 
 // https://vite.dev/config/
 // Separate pages: landing (index.html), contact (contact.html), about (about.html) community (community.html) cohort (cohort.html) and market push (market.html).
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), adminApi()],
   build: {
     rollupOptions: {
       input: {
@@ -15,6 +16,10 @@ export default defineConfig({
         community: resolve(import.meta.dirname, 'community.html'),
         cohort: resolve(import.meta.dirname, 'cohort.html'),
         market: resolve(import.meta.dirname, 'market.html'),
+        admin: resolve(import.meta.dirname, 'admin.html'),
+        signin: resolve(import.meta.dirname, 'signin.html'),
+        legal: resolve(import.meta.dirname, 'legal.html'),
+        profile: resolve(import.meta.dirname, 'profile.html'),
       },
     },
   },

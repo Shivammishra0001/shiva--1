@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cohorts, communities, communityHref } from '../data/communities'
 import { navLinks, site } from '../data/siteContent'
+import { signOut, useMember } from '../member/session'
 
 const find = (list, ids) => ids.map((id) => list.find((c) => c.id === id)).filter(Boolean)
 const mask = (src) => ({ WebkitMaskImage: `url(${src})`, maskImage: `url(${src})` })
@@ -17,8 +18,8 @@ const MENUS = {
   communities: {
     id: 'community-menu', label: 'Communities', noun: 'community', allLabel: 'See all communities',
     cols: [
-      { title: 'Applied AI', items: find(communities, ['ai', 'cybersecurity']) },
-      { title: 'Data, compute and cloud', items: find(communities, ['neo4j', 'quantum', 'cloud']) },
+      { title: 'Artificial intelligence', items: find(communities, ['ai', 'ai-governance']) },
+      { title: 'Compute and cloud', items: find(communities, ['quantum', 'cloud']) },
     ],
   },
 }
@@ -73,8 +74,8 @@ function MegaMenu({ link, menu, onNavigate, index }) {
 }
 
 export default function Navbar({ onBook }) {
+  const member = useMember()
   const [open, setOpen] = useState(false)
-  const [signInNote, setSignInNote] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -82,12 +83,6 @@ export default function Navbar({ onBook }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
-
-  useEffect(() => {
-    if (!signInNote) return
-    const t = setTimeout(() => setSignInNote(false), 4000)
-    return () => clearTimeout(t)
-  }, [signInNote])
 
   // Lock page scroll behind the full-screen mobile menu.
   useEffect(() => {
@@ -116,17 +111,13 @@ export default function Navbar({ onBook }) {
               )))}
           </ul>
           <div className="nav__actions">
-            {/* Sign-in is not built yet: clearly a placeholder, never a fake login. */}
             <button type="button" className="btn btn--primary" onClick={() => { close(); onBook() }}>
               Book Your Seat
             </button>
-            <button type="button" className="btn btn--ghost" onClick={() => setSignInNote(true)}>
-              Sign In
-            </button>
+            {member.user
+              ? <><a className="btn btn--ghost" href="/profile.html" onClick={close}>Profile</a><button type="button" className="btn btn--ghost" onClick={signOut} title={`Signed in as ${member.user.name}`}>Sign out</button></>
+              : <a className="btn btn--ghost" href="/signin.html" onClick={close}>Sign In</a>}
           </div>
-          {signInNote && (
-            <p className="nav__note" role="status">Sign-in isn’t available yet. It’s coming soon.</p>
-          )}
         </nav>
 
         <button

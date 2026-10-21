@@ -138,19 +138,18 @@ function PastCard({ event }) {
 }
 
 function Registration({ event }) {
-  const [form, setForm] = useState({ name: '', email: '', note: '' })
-  const [errors, setErrors] = useState({})
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
-  const set = (p) => setForm((f) => ({ ...f, ...p }))
   const reg = event.registration
+  const started = Date.now() >= Date.parse(event.startDateTime)
 
   if (reg) {
     return (
       <div className="cm-regdone" role="status">
-        <h3>Registration saved</h3>
-        <p>We saved your registration for <b>{reg.name}</b> ({reg.email}) in this browser.</p>
-        <p className="cm-muted cm-sm">This website doesn’t have a server yet, so organisers aren’t notified automatically. Keep the event date in your calendar.</p>
-        <button type="button" className="cm-btn cm-btn--ghost is-sm" onClick={() => { api.cancelRegistration(event.id); toast('Registration removed', { tone: 'info' }) }}>Remove my registration</button>
+        <h3>You’re registered</h3>
+        <p>This registration is saved to your account. You can see it, and cancel it, from your <a href="/profile.html">profile</a>.</p>
+        {!started && <button type="button" className="cm-btn cm-btn--ghost is-sm" disabled={pending} onClick={async () => { setPending(true); try { await api.cancelRegistration(event.id); toast('Registration cancelled', { tone: 'info' }) } catch (e) { toast(e.message, { tone: 'error' }) } finally { setPending(false) } }}>{pending && <Spinner />}Cancel my registration</button>}
       </div>
     )
   }
@@ -161,24 +160,16 @@ function Registration({ event }) {
   }
   const submit = async (e) => {
     e.preventDefault()
-    const next = {}
-    if (form.name.trim().length < 2) next.name = 'Enter your name.'
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Enter a valid email address.'
-    setErrors(next)
-    if (Object.keys(next).length) return
-    setPending(true)
-    try { await api.registerForEvent(event.id, form); toast('Registration saved') } finally { setPending(false) }
+    setPending(true); setError('')
+    try { await api.registerForEvent(event.id, { note }); toast('You’re registered') } catch (err) { setError(err.message) } finally { setPending(false) }
   }
   return (
     <form className="cm-form cm-regform" onSubmit={submit} noValidate aria-label={`Register for ${event.title}`}>
       <h3>Register for this event</h3>
-      <label>Name *<input value={form.name} onChange={(e) => set({ name: e.target.value })} autoComplete="name" aria-invalid={!!errors.name} /></label>
-      {errors.name && <p className="cm-err" role="alert">{errors.name}</p>}
-      <label>Email *<input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} autoComplete="email" aria-invalid={!!errors.email} /></label>
-      {errors.email && <p className="cm-err" role="alert">{errors.email}</p>}
-      <label>Anything we should know? <small>(optional)</small><input value={form.note} onChange={(e) => set({ note: e.target.value })} /></label>
+      <p className="cm-muted cm-sm">We’ll use the name and email on your account.</p>
+      <label>Anything we should know? <small>(optional)</small><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></label>
+      {error && <p className="cm-err" role="alert">{error}</p>}
       <button type="submit" className="cm-btn cm-btn--primary" disabled={pending}>{pending && <Spinner />}Register</button>
-      <p className="cm-muted cm-xs">Your details stay on this device for now. There’s no server to receive them yet.</p>
     </form>
   )
 }

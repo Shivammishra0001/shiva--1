@@ -2,7 +2,7 @@
 // are SAMPLE data (labelled "Demo" in the UI) until a real backend exists.
 // Brand names are used only to describe independent builder communities.
 
-export const COMMUNITY_CATEGORIES = ['All', 'Artificial Intelligence', 'Security', 'Data & Graphs', 'Quantum', 'Engineering']
+export const COMMUNITY_CATEGORIES = ['All', 'Artificial Intelligence', 'AI Governance', 'Quantum', 'Engineering']
 export const COMMUNITY_SORTS = [
   { id: 'default', label: 'Featured' },
   { id: 'members', label: 'Most followers' },
@@ -20,7 +20,7 @@ const rules = [
 // Follower baselines are DEMO figures (the UI labels them) until a real backend counts followers.
 // Each follow made in a browser adds one on top of the baseline.
 const FOLLOWERS = {
-  ai: 1840, cybersecurity: 960, neo4j: 2900, quantum: 640, cloud: 1210,
+  ai: 1840, 'ai-governance': 720, quantum: 640, cloud: 1210,
   openai: 3200, anthropic: 2100, gemini: 1500, huggingface: 2400, sarvam: 880, deepseek: 1700, databricks: 1100, 'neo4j-cohort': 760, nvidia: 1900,
 }
 
@@ -30,8 +30,7 @@ const topic = (o) => mk({ kind: 'topic', sample: false, ...o })
 
 export const communities = [
   topic({ id: 'ai', group: 'Artificial Intelligence', name: 'AI', logo: '/logos/pytorch.svg', tagline: 'Models, agents and real applications', accent: '#f6dbc0', about: 'A space to learn how modern AI works, build with it and share what you find, from language models to agents.', topics: ['Language models', 'Agents', 'Prompting', 'Evaluation', 'Applications'], keywords: ['llm', 'language model', 'prompt', 'agent', 'foundation model', 'machine learning', 'data science'] }),
-  topic({ id: 'cybersecurity', group: 'Security', name: 'Cybersecurity', logo: '/logos/owasp.svg', tagline: 'Secure systems, data and models', accent: '#e8a0a0', about: 'For people who want to understand and defend systems, from application security to securing machine learning pipelines.', topics: ['Application security', 'Threat modelling', 'Secure ML', 'Privacy', 'Incident response'], keywords: ['security', 'privacy', 'threat', 'cyber', 'governance'] }),
-  mk({ id: 'neo4j', group: 'Data & Graphs', name: 'Neo4j', logo: '/logos/neo4j.svg', tagline: 'Graphs & GraphRAG', categories: ['Data', 'Knowledge Graph', 'Developer'], keywords: ['neo4j', 'graph', 'knowledge graph', 'ontology'], activeMembersCount: 88, accent: '#9fd6c0', mark: 'N4', about: 'For people working with graph databases, knowledge graphs and GraphRAG.', topics: ['Cypher', 'GraphRAG', 'Knowledge graphs', 'Modelling', 'Retrieval'], officialWebsite: 'https://neo4j.com', docs: 'https://neo4j.com/docs', github: 'https://github.com/neo4j' }),
+  topic({ id: 'ai-governance', group: 'AI Governance', name: 'AI Governance', logo: '/logos/scale.svg', tagline: 'Responsible AI, risk and compliance', accent: '#e8a0a0', about: 'For people who want AI to be safe, fair and accountable: policy, risk assessment, documentation and compliance in practice.', topics: ['Responsible AI', 'Risk assessment', 'Model documentation', 'Compliance', 'Ethics'], keywords: ['governance', 'responsible ai', 'ethics', 'compliance', 'risk', 'policy'] }),
   topic({ id: 'quantum', group: 'Quantum', name: 'Quantum Computing', logo: '/logos/qiskit.svg', tagline: 'Qubits, algorithms and what comes next', accent: '#b6b0f0', about: 'A beginner-friendly space to explore quantum computing concepts, tools and early applications.', topics: ['Qubits', 'Quantum algorithms', 'Simulators', 'Quantum ML', 'Learning paths'], keywords: ['quantum', 'qubit'] }),
   topic({ id: 'cloud', group: 'Engineering', name: 'Cloud Computing', logo: '/logos/kubernetes.svg', tagline: 'Deploying and running systems in the cloud', accent: '#b9c8e8', about: 'For people who build and ship on the cloud: containers, pipelines, monitoring, MLOps and the platforms behind them.', topics: ['Deployment', 'Containers', 'MLOps', 'Monitoring', 'Cost'], keywords: ['mlops', 'deploy', 'docker', 'cloud', 'ci/cd', 'pipeline', 'data engineering'] }),
 ]

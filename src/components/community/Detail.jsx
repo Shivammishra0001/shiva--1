@@ -2,22 +2,24 @@ import { createContext, Fragment, useContext, useEffect, useRef, useState } from
 import { cohorts, communities, communityHref } from '../../data/communities'
 import {
   api, num, fullDate, getCommunity, navigate, pageBase, setParams, timeAgo, toast,
-  useAuth, useComments, useCommunityPosts, useEvents, useFollow, useJoinFlow, useJoinedCommunityIds, useMembers, useParams, useProjects,
+  useAuth, useComments, useCommunityPosts, useEnrollment, useEvents, useFollow, useJoinFlow, useJoinedCommunityIds, useMembers, useParams,
 } from '../../lib/community'
+import { newsFor } from '../../data/news'
 import { projectBySlug, projectsForCohort, projectStatuses } from '../../data/projects'
 import { EventCard } from './Events'
-import { Avatar, Dialog, EmptyState, Icon, JoinButton, Loader, Logo, Menu, SampleBadge, SmartLink, Spinner } from './ui'
+import { Avatar, Dialog, EmptyState, Icon, JoinButton, Loader, Logo, Menu, ReportDialog, SampleBadge, SmartLink, Spinner } from './ui'
 
 const Ctx = createContext(null)
 const useCtx = () => useContext(Ctx)
 const TABS = [
-  { id: 'feed', label: 'Feed' }, { id: 'about', label: 'About' }, { id: 'events', label: 'Events' }, { id: 'members', label: 'Members' },
+  { id: 'about', label: 'About' }, { id: 'events', label: 'Events' }, { id: 'feed', label: 'Blog' }, { id: 'members', label: 'Members' },
 ]
-// Community pages have 4 tabs (Feed, About, Events, Members); cohort pages have 3 (Feed, About, Projects).
+// Community: About, Events, Blog, Members. Cohort: About, Projects, Blog, Members. (The blog tab keeps the internal id 'feed'.)
 const COHORT_TABS = [
-  { id: 'feed', label: 'Feed' }, { id: 'about', label: 'About' }, { id: 'projects', label: 'Projects' },
+  { id: 'about', label: 'About' }, { id: 'projects', label: 'Projects' }, { id: 'feed', label: 'Blog' }, { id: 'members', label: 'Members' },
 ]
 const tabsFor = (c) => (c.cohort ? COHORT_TABS : TABS)
+const STATUS_NOTE = { pending_review: 'Awaiting review. Only you can see this until a moderator has looked at it.', restricted: 'Held for urgent review. Only you can see this.', under_appeal: 'Under appeal. Only you can see this.' }
 const TYPE_LABEL = { question: 'Question', announcement: 'Announcement', event: 'Event', project: 'Project update', poll: 'Poll' }
 const cx = (...a) => a.filter(Boolean).join(' ')
 const noun = (c) => (c.cohort ? 'cohort' : 'community')
@@ -31,6 +33,7 @@ function Provider({ community, onBook, children }) {
   const flow = useJoinFlow(community)
   const [prompt, setPrompt] = useState(null)
   const [muted, setMuted] = useState(() => new Set())
+  const [reporting, setReporting] = useState(null)
   const composerRef = useRef(null)
 
   const participate = (reason, action) => {
@@ -39,15 +42,15 @@ function Provider({ community, onBook, children }) {
     if (!flow.joined) return setPrompt({ reason, action })
     return action?.(flow.user)
   }
-  const confirmJoin = async () => {
+  const confirmJoin = () => {
     const next = prompt?.action
-    await flow.join()
     setPrompt(null)
-    next?.(flow.user)
+    flow.join(next)
   }
   return (
-    <Ctx.Provider value={{ community, flow, onBook, participate, muted, mute: (id) => setMuted((s) => new Set(s).add(id)), composerRef }}>
+    <Ctx.Provider value={{ community, flow, onBook, report: setReporting, participate, muted, mute: (id) => setMuted((s) => new Set(s).add(id)), composerRef }}>
       {children}
+      <ReportDialog target={reporting} onClose={() => setReporting(null)} />
       <Dialog open={!!prompt} onClose={() => setPrompt(null)} title={`Join ${community.name}`} description={prompt ? `Join the ${noun(community)} to ${prompt.reason}.` : undefined}>
         <div className="cm-joinbox"><Logo community={community} /><p>Members can post, reply, react, save and join events. You can leave at any time.</p></div>
         <div className="cm-dialog__row">
@@ -82,7 +85,6 @@ function ProjectNav({ community }) {
 
 function Nav({ current, community }) {
   const [q, setQ] = useState('')
-  const word = noun(community)
   const plural = community.cohort ? 'cohorts' : 'communities'
   const joined = useJoinedCommunityIds()
   const needle = q.trim().toLowerCase()
@@ -132,33 +134,59 @@ function Links({ community }) {
     </ul>
   )
 }
-const Rules = ({ rules }) => <ol className="cm-rules">{rules.map((r, i) => <li key={r}><span>{i + 1}.</span>{r}</li>)}</ol>
+
+// Right column: an advertising slot and topic news. The ad is a placeholder shape for you to fill.
+function AdSlot() {
+  const { community } = useCtx()
+  return (
+    <aside className="cm-ad" aria-label="Advertisement" style={{ '--acc': community.accent }}>
+      <p className="cm-ad__label">Advertisement</p>
+      <div className="cm-ad__box">
+        <b>Promote your product here</b>
+        <span>Reach people who follow {community.name}.</span>
+        <a className="cm-ad__cta" href="/contact.html">Advertise with us</a>
+      </div>
+    </aside>
+  )
+}
+
+function News() {
+  const { community } = useCtx()
+  const items = newsFor(community)
+  return (
+    <section className="cm-panel cm-news" aria-labelledby="news-title">
+      <h2 id="news-title" className="cm-h">Latest news</h2>
+      <p className="cm-muted cm-xs"><SampleBadge>Sample headlines</SampleBadge> A live news feed is not connected yet.</p>
+      <ul>
+        {items.map((n) => (
+          <li key={n.id}>
+            <small>{n.source} · {community.name}</small>
+            <b>{n.title}</b>
+            <span>{n.summary}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
 
 function Sidebar() {
-  const { community, flow } = useCtx()
-  const follow = useFollow(community)
-  return (
-    <div className="cm-side">
-      <section className="cm-panel" aria-labelledby="info-title">
-        <div className="cm-side__id"><Logo community={community} size="sm" decorative /><h2 id="info-title">{community.name}</h2></div>
-        <dl className="cm-bigstats">
-          <div><dt>Followers</dt><dd><span className="cm-count" key={follow.count} aria-live="polite">{num(follow.count)}</span></dd></div>
-          {community.activeMembersCount != null && <div><dt>Active today</dt><dd>{community.activeMembersCount}</dd></div>}
-        </dl>
-        <p className="cm-muted cm-xs"><SampleBadge>Demo counts</SampleBadge></p>
-        <p className="cm-muted">{community.about}</p>
-        {flow.joined && <p className="cm-ok">You’re a member.</p>}
-      </section>
-      <section className="cm-panel" aria-labelledby="sb-links"><h2 id="sb-links" className="cm-h">Links</h2><Links community={community} /></section>
-      <section className="cm-panel" aria-labelledby="sb-rules"><h2 id="sb-rules" className="cm-h">Rules</h2><Rules rules={community.rules} /></section>
-    </div>
-  )
+  return <div className="cm-side"><AdSlot /><News /></div>
 }
 
 // Cohorts have no join flow: the call to action is always "Book your seat".
 function Action({ small }) {
   const { community, flow, onBook } = useCtx()
-  if (community.cohort) return <button type="button" className={cx('cm-btn cm-btn--primary cm-join', small && 'is-sm')} onClick={() => onBook?.()}>Book your seat</button>
+  const enr = useEnrollment(community)
+  if (community.cohort) {
+    // Booking a seat (workspace) and enrolling in a cohort are different things, so they are separate buttons.
+    return (
+      <>
+        <button type="button" className={cx('cm-btn cm-btn--ghost cm-follow', enr.enrolled && 'is-on')} aria-pressed={enr.enrolled} disabled={enr.pending} onClick={() => enr.toggle().then(() => toast(enr.enrolled ? 'You left this cohort' : 'You’re enrolled in this cohort', { tone: 'info' })).catch((e) => toast(e.message, { tone: 'error' }))}>{enr.pending && <Spinner />}{enr.enrolled ? 'Enrolled · Withdraw' : 'Enrol in cohort'}</button>
+        <button type="button" className={cx('cm-btn cm-btn--primary cm-join', small && 'is-sm')} onClick={() => onBook?.()}>Book your seat</button>
+      </>
+    )
+  }
   return <JoinButton small={small} joined={flow.joined} pending={flow.pending} onJoin={() => flow.join()} onLeave={flow.leave} name={community.name} />
 }
 
@@ -192,7 +220,7 @@ function Header() {
 
 function Tabs({ active, tabs: TABS }) {
   const params = useParams()
-  const go = (id) => setParams(params, { tab: id === 'feed' ? '' : id })
+  const go = (id) => setParams(params, { tab: id === TABS[0].id ? '' : id })
   const onKey = (e) => {
     const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
     if (!d) return
@@ -213,7 +241,7 @@ function Tabs({ active, tabs: TABS }) {
 
 /* ---------- feed ---------- */
 function JoinCallout({ inline }) {
-  const { community, flow } = useCtx()
+  const { community } = useCtx()
   return (
     <div className="cm-panel cm-callout">
       <div><Logo community={community} size="sm" decorative />
@@ -321,6 +349,7 @@ function PostCard({ post }) {
         </div>
         <PostMenu post={post} />
       </header>
+      {post.serverStatus && <p className="cm-note" role="status">{STATUS_NOTE[post.serverStatus] ?? 'Not visible to others.'}</p>}
       <div className="cm-post__text">{post.content.split(/\n{2,}/).map((para, i) => <p key={i}>{para}</p>)}</div>
       {post.tags?.length > 0 && <p className="cm-hashtags">{post.tags.map((t) => <span key={t}>#{t}</span>)}</p>}
       {post.images?.length > 0 && (
@@ -380,11 +409,11 @@ function Actions({ post, open, onComment, onToggle }) {
 }
 
 function PostMenu({ post }) {
-  const { mute } = useCtx()
+  const { mute, report } = useCtx()
   return (
     <Menu label="More options for this post" trigger={<Icon name="more" />} items={[
       { label: 'Copy link', icon: 'link', onSelect: () => navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}${window.location.search}#${post.id}`).then(() => toast('Link copied')) },
-      { label: 'Report post', icon: 'flag', onSelect: () => toast('Thanks. A moderator will review this.', { tone: 'info' }) },
+      ...(post.sample || post.mine ? [] : [{ label: 'Report post', icon: 'flag', onSelect: () => report({ type: 'post', id: post.id }) }]),
       { label: `Mute ${post.author.name.split(' ')[0]}`, icon: 'bellOff', onSelect: () => { mute(post.authorId); toast(`Muted ${post.author.name} in this feed`, { tone: 'info' }) } },
     ]} />
   )
@@ -424,6 +453,7 @@ function Comment({ comment, onReply, replying, post, onDone }) {
 
 function CommentBody({ comment, small, onReply }) {
   const { author } = comment
+  const { report } = useCtx()
   return (
     <div className="cm-comment">
       <Avatar name={author.name} accent={author.accent} size={small ? 'xs' : 'sm'} />
@@ -431,7 +461,8 @@ function CommentBody({ comment, small, onReply }) {
         <div className="cm-comment__bubble"><p><b>{author.name}</b>{author.role && <span className="cm-muted"> · {author.role}</span>}</p><p>{comment.content}</p></div>
         <p className="cm-comment__meta"><time dateTime={comment.createdAt}>{timeAgo(comment.createdAt)}</time>
           {onReply && <button type="button" onClick={onReply}>Reply<span className="sr-only"> to {author.name}</span></button>}
-          <button type="button" onClick={() => toast('Thanks. A moderator will review this.', { tone: 'info' })}>Report</button></p>
+          {comment.__server && !comment.mine && <button type="button" onClick={() => report({ type: 'comment', id: comment.id })}>Report<span className="sr-only"> comment by {author.name}</span></button>}
+          {comment.serverStatus && <span className="cm-tag">{comment.serverStatus === 'pending_review' ? 'Awaiting review' : 'Hidden'}</span>}</p>
       </div>
     </div>
   )
@@ -443,6 +474,7 @@ function CommentInput({ post, parent = null, autoFocus, onDone, focusKey }) {
   const [pending, setPending] = useState(false)
   const ref = useRef(null)
   useEffect(() => { if (focusKey) ref.current?.focus() }, [focusKey])
+  if (post.sample) return <p className="cm-dashed"><span><Icon name="message" /> Comments are turned off on sample posts. Start a conversation by writing your own post.</span></p>
   if (!flow.joined) {
     return (
       <div className="cm-dashed"><span><Icon name="message" /> Join to {parent ? 'reply' : 'comment'}.</span>
@@ -455,11 +487,11 @@ function CommentInput({ post, parent = null, autoFocus, onDone, focusKey }) {
     participate('comment', async () => {
       setPending(true)
       try {
-        await api.addComment(post.id, { content: text, parentCommentId: parent?.id ?? null })
+        const r = await api.addComment(post.id, { content: text, parentCommentId: parent?.id ?? null })
         setText('')
-        toast(parent ? 'Reply added' : 'Comment added')
+        toast(r.message ?? (parent ? 'Reply added' : 'Comment added'), { tone: r.held ? 'info' : 'success' })
         onDone?.()
-      } finally { setPending(false) }
+      } catch (err) { toast(err.message, { tone: 'error' }) } finally { setPending(false) }
     })
   }
   return (
@@ -477,95 +509,46 @@ function CommentInput({ post, parent = null, autoFocus, onDone, focusKey }) {
 }
 
 /* ---------- composer ---------- */
-const MAX_IMAGES = 4
-const MAX_BYTES = 5 * 1024 * 1024
-const readAsDataUrl = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file) })
-
+// Posts are text with an optional link. The server screens every post before it is published, so images, polls and
+// project attachments (which it does not store or check) are not offered here.
 function CreatePost() {
   const { community, flow, composerRef } = useCtx()
   const [text, setText] = useState('')
-  const [mode, setMode] = useState(null)
-  const [images, setImages] = useState([])
+  const [withLink, setWithLink] = useState(false)
   const [link, setLink] = useState('')
-  const [pollOptions, setPollOptions] = useState(['', ''])
-  const [projectId, setProjectId] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
-  const fileRef = useRef(null)
-  const { data: projects } = useProjects(community.slug, mode === 'project')
-
-  const choose = (m) => { setError(''); if (m === 'image') fileRef.current?.click(); setMode((cur) => (cur === m && m !== 'image' ? null : m)) }
-  const onFiles = async (files) => {
-    const list = [...files].slice(0, MAX_IMAGES - images.length)
-    const big = list.find((f) => f.size > MAX_BYTES)
-    if (big) return setError(`“${big.name}” is over 5 MB.`)
-    const urls = await Promise.all(list.map(readAsDataUrl))
-    if (urls.length) { setImages((c) => [...c, ...urls]); setMode('image'); toast(urls.length === 1 ? 'Image added' : `${urls.length} images added`) }
-  }
-  const reset = () => { setText(''); setMode(null); setImages([]); setLink(''); setPollOptions(['', '']); setProjectId(''); setError('') }
-  const validPoll = pollOptions.filter((o) => o.trim()).length >= 2
-  const canPost = text.trim().length > 0 && (mode !== 'poll' || validPoll) && (mode !== 'link' || /^https?:\/\/\S+\.\S+/.test(link)) && (mode !== 'project' || projectId)
+  const linkOk = !withLink || /^https?:\/\/\S+\.\S+/.test(link)
+  const canPost = text.trim().length > 0 && text.length <= 5000 && linkOk
 
   const submit = async (e) => {
     e?.preventDefault()
     if (!canPost || pending) return
-    setPending(true)
+    setPending(true); setError('')
     try {
-      await api.createPost(community.slug, {
-        content: text, images: mode === 'image' ? images : [], link: mode === 'link' ? link.trim() : null,
-        poll: mode === 'poll' ? pollOptions.map((o) => o.trim()).filter(Boolean) : null, projectId: mode === 'project' ? projectId : null,
-      })
-      reset()
-      toast('Post published')
+      const r = await api.createPost(community.slug, { content: text, link: withLink ? link.trim() : null })
+      setText(''); setLink(''); setWithLink(false)
+      toast(r.message ?? 'Post published', { tone: r.held ? 'info' : 'success' })
     } catch (err) { setError(err.message) } finally { setPending(false) }
   }
-  const tool = (m, icon, label) => (
-    <button type="button" onClick={() => choose(m)} aria-pressed={mode === m} className={cx('cm-ghost', mode === m && 'is-on')}>
-      <Icon name={icon} /><span className="cm-hide-sm">{label}</span><span className="sr-only cm-show-sm">{label}</span>
-    </button>
-  )
   return (
     <form onSubmit={submit} className="cm-panel cm-compose" aria-label="Create a post">
       <div className="cm-compose__row">
         <Avatar name={flow.user.name} accent={flow.user.accent} size="lg" />
         <label>
           <span className="sr-only">Post text</span>
-          <textarea ref={composerRef} value={text} rows={2} onChange={(e) => setText(e.target.value)}
+          <textarea ref={composerRef} value={text} rows={2} maxLength={5000} onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === 'Enter' && submit(e)}
-            placeholder={mode === 'poll' ? 'Ask a question…' : `Share something with ${community.name} builders…`} />
+            placeholder={`Share something with ${community.name} builders…`} />
         </label>
       </div>
-      {mode === 'image' && images.length > 0 && (
-        <ul className="cm-thumbs" aria-label="Attached images">
-          {images.map((src, i) => (
-            <li key={i}><img src={src} alt={`Attachment ${i + 1}`} />
-              <button type="button" onClick={() => setImages((c) => c.filter((_, j) => j !== i))} aria-label={`Remove image ${i + 1}`}><Icon name="x" /></button></li>
-          ))}
-        </ul>
-      )}
-      {mode === 'link' && <label className="cm-field"><span className="sr-only">Link URL</span><input type="url" autoFocus value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" /></label>}
-      {mode === 'poll' && (
-        <fieldset className="cm-pollform"><legend>Poll options (2–4)</legend>
-          {pollOptions.map((o, i) => (
-            <div key={i}><input value={o} onChange={(e) => setPollOptions((c) => c.map((x, j) => (j === i ? e.target.value : x)))} placeholder={`Option ${i + 1}`} aria-label={`Option ${i + 1}`} />
-              {pollOptions.length > 2 && <button type="button" className="cm-ghost" onClick={() => setPollOptions((c) => c.filter((_, j) => j !== i))} aria-label={`Remove option ${i + 1}`}><Icon name="x" /></button>}</div>
-          ))}
-          {pollOptions.length < 4 && <button type="button" className="cm-ghost" onClick={() => setPollOptions((c) => [...c, ''])}><Icon name="plus" /> Add option</button>}
-        </fieldset>
-      )}
-      {mode === 'project' && (
-        <label className="cm-field">Attach a project
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">{projects ? 'Choose a project…' : 'Loading projects…'}</option>
-            {projects?.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.stage}</option>)}
-          </select></label>
-      )}
+      {withLink && <label className="cm-field"><span className="sr-only">Link URL</span><input type="url" autoFocus value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" /></label>}
       {error && <p role="alert" className="cm-err">{error}</p>}
-      <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
       <div className="cm-compose__foot">
-        <div>{tool('image', 'image', 'Image')}{tool('link', 'link', 'Link')}{tool('poll', 'chart', 'Poll')}{tool('project', 'rocket', 'Project')}</div>
+        <div><button type="button" onClick={() => setWithLink((v) => !v)} aria-pressed={withLink} className={cx('cm-ghost', withLink && 'is-on')}><Icon name="link" /><span className="cm-hide-sm">Link</span><span className="sr-only cm-show-sm">Link</span></button></div>
         <button type="submit" className="cm-btn cm-btn--primary" disabled={!canPost || pending}>{pending && <Spinner />}Post</button>
       </div>
+      <p className="cm-muted cm-xs">Posts follow the <a href="/legal.html?doc=guidelines" target="_blank" rel="noopener">Community Guidelines</a> and are checked before they appear.</p>
     </form>
   )
 }
@@ -588,7 +571,6 @@ function About() {
       </section>
       <section className="cm-panel" aria-labelledby="topics-title"><h2 id="topics-title" className="cm-h">Topics</h2>
         <ul className="cm-chips">{community.topics.map((t) => <li key={t}>{t}</li>)}</ul></section>
-      <section className="cm-panel" aria-labelledby="rules-title"><h2 id="rules-title" className="cm-h"><Icon name="shield" /> {community.cohort ? 'Cohort' : 'Community'} rules</h2><Rules rules={community.rules} /></section>
       <section className="cm-panel" aria-labelledby="links-title"><h2 id="links-title" className="cm-h">Resources</h2><Links community={community} />
         {community.kind === 'company' && <p className="cm-muted cm-xs">An independent {noun(community)}. Not affiliated with or endorsed by {community.name}.</p>}</section>
     </div>
@@ -672,14 +654,21 @@ function Members() {
   if (!data?.length) return <EmptyState icon="user" title="No members yet." body="Be the first to join." />
   return (
     <div><SampleBadge>Demo profiles</SampleBadge>
-      <ul className="cm-cards2">{data.map((m) => (
-        <li key={m.id} className="cm-panel cm-member">
-          <Avatar name={m.name} accent={m.accent} size="lg" />
-          <div><p><b>{m.name}</b>{m.isModerator && <span className="cm-tag">Moderator</span>}{m.isLocal && <span className="cm-tag is-ok">You</span>}</p>
-            <p className="cm-muted cm-sm">{m.role}</p>
-            {m.skills?.length > 0 && <p className="cm-muted cm-xs">{m.skills.join(' · ')}</p>}
-            <p className="cm-muted cm-xs">{m.projectsCount ?? 0} projects</p></div>
-        </li>))}</ul></div>
+      <div className="cm-panel cm-mlist" role="table" aria-label={`${community.name} members`}>
+        <div className="cm-mlist__head" role="row"><span role="columnheader">Member</span><span role="columnheader">Skills</span><span role="columnheader">Projects</span><span role="columnheader">Role</span></div>
+        {data.map((m) => (
+          <div key={m.id} className="cm-mlist__row" role="row">
+            <span className="cm-mlist__who" role="cell">
+              <Avatar name={m.name} accent={m.accent} size="md" />
+              <span><b>{m.name}</b><small>{m.role}</small></span>
+            </span>
+            <span className="cm-mlist__skills" role="cell">{m.skills?.length ? m.skills.map((k) => <i key={k}>{k}</i>) : <small>-</small>}</span>
+            <span className="cm-mlist__n" role="cell"><b>{m.projectsCount ?? 0}</b> <small>{(m.projectsCount ?? 0) === 1 ? 'project' : 'projects'}</small></span>
+            <span role="cell">{m.isLocal ? <em className="cm-tag is-ok">You</em> : m.isModerator ? <em className="cm-tag">Moderator</em> : <small>Member</small>}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -689,7 +678,7 @@ export default function Detail({ slug, onBook }) {
   const community = getCommunity(slug)
   useAuth()
   const tabs = community ? tabsFor(community) : TABS
-  const tab = tabs.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'feed'
+  const tab = tabs.some((t) => t.id === params.get('tab')) ? params.get('tab') : tabs[0].id
   useEffect(() => { if (community) document.title = `${community.name} ${noun(community)} | Data Science Co-Working Space` }, [community])
 
   if (!community) {

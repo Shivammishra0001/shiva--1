@@ -5,6 +5,7 @@ import Navbar from './components/Navbar'
 import CommunityApp from './components/CommunityApp'
 import Footer from './components/Footer'
 import BookingModal from './components/BookingModal'
+import MemberGate from './member/Gate'
 
 // Separate page (community.html): communities and events together.
 function App() {
@@ -13,7 +14,7 @@ function App() {
     <>
       <a className="skip-link" href="#main">Skip to content</a>
       <Navbar onBook={() => setBooking(true)} />
-      <main id="main" className="cm-pagemain"><CommunityApp /></main>
+      <main id="main" className="cm-pagemain"><MemberGate><CommunityApp /></MemberGate></main>
       <Footer />
       <BookingModal open={booking} onClose={() => setBooking(false)} />
     </>

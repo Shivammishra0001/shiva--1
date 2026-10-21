@@ -5,7 +5,7 @@ export default function Hero({ onBook }) {
       <div className="hero__bg" aria-hidden="true" />
       <div className="hero__overlay" aria-hidden="true" />
       <div className="container hero__content">
-        <h1 className="hero__animate">DataScience Coworking</h1>
+        <h1 className="hero__animate">DataScience Coworking </h1>
         <p className="hero__kicker hero__animate">India’s first dedicated data science & Ai co-working space</p>
         <p className="hero__lead hero__animate">Build your AI and data products alongside India’s top people.</p>
         <p className="hero__punch hero__animate">Stop scrolling. Start building.</p>

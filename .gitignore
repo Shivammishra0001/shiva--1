@@ -26,3 +26,7 @@ dist-ssr
 .*
 **/skills/
 .*
+
+# Admin backend: local database and credentials
+server/data/
+server/.env

@@ -7,7 +7,7 @@ import { events as eventRecords } from '../data/events'
 import { getStatusLabel, isPast, isUpcoming } from '../utils/eventHelpers'
 
 const KEY = 'dscw.community.v1'
-const blank = { user: null, joined: [], following: [], reactions: {}, saved: {}, rsvp: {}, votes: {}, posts: [], comments: [], registrations: {} }
+const blank = { user: null, joined: [], enrolled: [], following: [], reactions: {}, saved: {}, rsvp: {}, votes: {}, posts: [], comments: [], registrations: {} }
 const load = () => {
   try { return { ...blank, ...JSON.parse(localStorage.getItem(KEY) || '{}') } } catch { return { ...blank } }
 }
@@ -28,6 +28,50 @@ if (typeof window !== 'undefined') {
 }
 const useVersion = () => useSyncExternalStore(subscribe, () => version, () => 0)
 const wait = (ms = 350) => new Promise((r) => setTimeout(r, ms))
+
+// ---------- member content from the server ----------
+// Posts and comments written by signed-in members live on the server (screened before publishing, reportable, moderated).
+// The sample posts below stay in the browser and are labelled as samples.
+const remote = { posts: {} } // space slug -> posts as the API returns them
+const bump = () => { version += 1; subs.forEach((f) => f()) }
+
+export class ServerError extends Error {
+  constructor(status, body) { super(body?.error?.message || 'Something went wrong. Try again.'); this.status = status; this.code = body?.error?.code }
+}
+export async function serverCall(method, path, body) {
+  let res
+  try {
+    res = await fetch(path, { method, credentials: 'same-origin', headers: { 'X-Requested-With': 'dscw-web', ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
+  } catch { throw new ServerError(0, { error: { message: 'Cannot reach the server. Check your connection and try again.' } }) }
+  const json = await res.json().catch(() => ({}))
+  if (res.status === 401) window.location.assign(`/signin.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+  if (!res.ok) throw new ServerError(res.status, json)
+  return json
+}
+// Copy the signed-in person's real memberships, enrolments and registrations into the local view.
+export async function syncMine() {
+  try {
+    const r = await serverCall('GET', '/api/me/participation')
+    const regs = Object.fromEntries(r.events.filter((e) => e.slug && e.status === 'registered').map((e) => [e.slug, { name: '', email: '', note: '', at: e.registeredAt }]))
+    patch({ joined: r.communities.map((c) => c.slug), enrolled: r.cohorts.filter((c) => c.status === 'enrolled').map((c) => c.slug), registrations: regs })
+  } catch { /* keep what we have */ }
+}
+export const useEnrollment = (cohort) => {
+  useVersion()
+  const [pending, setPending] = useState(false)
+  const enrolled = state.enrolled.includes(cohort.slug)
+  return { enrolled, pending, toggle: async () => { setPending(true); try { await (enrolled ? api.withdraw(cohort.slug) : api.enroll(cohort.slug)) } finally { setPending(false) } } }
+}
+
+export async function refreshServerPosts(slug) {
+  try { remote.posts[slug] = (await serverCall('GET', `/api/community/${slug}/posts`)).items; bump() } catch { /* shown as sample posts only */ }
+}
+const serverPostsFor = (slug) => (remote.posts[slug] ?? []).map((sp) => ({
+  id: sp.id, communityId: bySlug[slug]?.id, authorId: sp.author.id, content: sp.content, createdAt: sp.createdAt, likes: 0, tags: [],
+  link: sp.link ? { url: sp.link, domain: new URL(sp.link).hostname.replace(/^www\./, ''), title: new URL(sp.link).hostname.replace(/^www\./, ''), description: '' } : undefined,
+  __server: true, __slug: slug, __author: { id: sp.author.id, name: sp.author.name, role: sp.mine ? 'You' : 'Member', accent: '#f6dbc0' }, __mine: sp.mine, __status: sp.status, __comments: sp.comments,
+}))
+const findServerPost = (id) => Object.values(remote.posts).flat().find((p) => p.id === id)
 
 // ---------- seed (built once) ----------
 const everyone = [...communities, ...cohorts]
@@ -59,6 +103,7 @@ function listCommunities({ q = '', category = 'All', sort = 'default' }) {
 const commentCount = (postId) => seed.comments.filter((c) => c.postId === postId).length + state.comments.filter((c) => c.postId === postId).length
 
 function decoratePost(p) {
+  if (p.__server) return { ...p, author: p.__author, sample: false, mine: p.__mine, serverStatus: p.__status, liked: !!state.reactions[p.id], likes: p.likes + (state.reactions[p.id] ? 1 : 0), saved: !!state.saved[p.id], commentsCount: p.__comments.length, poll: undefined }
   const liked = !!state.reactions[p.id]
   const myVote = state.votes[p.id] ?? null
   const poll = p.poll && {
@@ -72,7 +117,7 @@ function decoratePost(p) {
 function listPosts(slug) {
   const c = bySlug[slug]
   if (!c) return []
-  const all = [...state.posts.filter((p) => p.communityId === c.id), ...seed.posts.filter((p) => p.communityId === c.id)]
+  const all = [...serverPostsFor(slug), ...state.posts.filter((p) => p.communityId === c.id), ...seed.posts.filter((p) => p.communityId === c.id)]
   all.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
   return all.map(decoratePost)
 }
@@ -83,6 +128,11 @@ const listActivity = () => communities.flatMap((c) => listPosts(c.slug).map((p) 
   .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3)
 
 function listComments(postId) {
+  if (String(postId).startsWith('sp-')) {
+    const sp = findServerPost(postId)
+    const all = (sp?.comments ?? []).map((c) => ({ id: c.id, postId, authorId: c.author.id, content: c.content, createdAt: c.createdAt, parentId: c.parentId, author: { id: c.author.id, name: c.author.name, role: c.mine ? 'You' : '', accent: '#f6dbc0' }, serverStatus: c.status, mine: c.mine, __server: true }))
+    return all.filter((c) => !c.parentId).map((t) => ({ ...t, replies: all.filter((r) => r.parentId === t.id) }))
+  }
   const all = [...seed.comments, ...state.comments].filter((c) => c.postId === postId)
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((c) => ({ ...c, author: author(c.authorId) }))
   const tops = all.filter((c) => !c.parentId)
@@ -109,7 +159,7 @@ const listAllEvents = () => decoratedEvents().sort((a, b) => new Date(a.startDat
 const listProjects = (slug) => seed.projects.filter((p) => p.communityId === bySlug[slug]?.id).map((p) => ({ ...p, builder: author(p.builder) }))
 const listMembers = (slug) => {
   const c = bySlug[slug]
-  const base = c?.sample ? members.map((m) => ({ ...m })) : []
+  const base = members.map((m) => ({ ...m })) // demo profiles, labelled in the UI
   return state.user && state.joined.includes(c?.id) ? [{ ...state.user, isLocal: true, projectsCount: 0 }, ...base] : base
 }
 
@@ -122,40 +172,51 @@ export const api = {
     return user
   },
   signOut() { patch({ user: null }) },
-  async join(id) { await wait(); if (!state.joined.includes(id)) patch({ joined: [...state.joined, id] }) },
-  async leave(id) { await wait(250); patch({ joined: state.joined.filter((x) => x !== id) }) },
+  // Memberships, enrolments and event registrations are records on the server; the browser copy below only mirrors them.
+  async join(id) { await serverCall('POST', `/api/community/${id}/membership`); if (!state.joined.includes(id)) patch({ joined: [...state.joined, id] }) },
+  async leave(id) { await serverCall('DELETE', `/api/community/${id}/membership`); patch({ joined: state.joined.filter((x) => x !== id) }) },
+  async enroll(slug) { await serverCall('POST', `/api/cohorts/${slug}/enrollment`); if (!state.enrolled.includes(slug)) patch({ enrolled: [...state.enrolled, slug] }) },
+  async withdraw(slug) { await serverCall('DELETE', `/api/cohorts/${slug}/enrollment`); patch({ enrolled: state.enrolled.filter((x) => x !== slug) }) },
   follow(id) { if (!state.following.includes(id)) patch({ following: [...state.following, id] }) },
   unfollow(id) { patch({ following: state.following.filter((x) => x !== id) }) },
   setReaction(postId, on) { patch({ reactions: { ...state.reactions, [postId]: on } }) },
   setSaved(postId, on) { patch({ saved: { ...state.saved, [postId]: on } }) },
-  // No server yet: a registration is saved in this browser only. The UI says so.
-  async registerForEvent(eventId, { name, email, note }) {
-    await wait(450)
-    patch({ registrations: { ...state.registrations, [eventId]: { name: name.trim(), email: email.trim(), note: note?.trim() ?? '', at: new Date().toISOString() } } })
-  },
-  cancelRegistration(eventId) { const r = { ...state.registrations }; delete r[eventId]; patch({ registrations: r }) },
+  // The server takes your name and email from your account. It enforces capacity, deadlines and duplicates.
+  async registerForEvent(eventId, { note }) { await serverCall('POST', `/api/community/events/${eventId}/register`, { note: note?.trim() || undefined }); await syncMine() },
+  async cancelRegistration(eventId) { await serverCall('DELETE', `/api/community/events/${eventId}/register`); await syncMine() },
   votePoll: async (postId, optionId) => { await wait(250); patch({ votes: { ...state.votes, [postId]: optionId } }) },
+  // Comments and posts go to the server, which screens them before they appear. Returns { held, message }.
   async addComment(postId, { content, parentCommentId }) {
-    await wait(250)
-    patch({ comments: [...state.comments, { id: `l-${Date.now()}`, postId, authorId: 'me', content: content.trim(), createdAt: new Date().toISOString(), parentId: parentCommentId }] })
+    const sp = findServerPost(postId)
+    if (!sp) throw new Error('Comments are only available on member posts.')
+    const slug = Object.keys(remote.posts).find((k) => remote.posts[k].some((p) => p.id === postId))
+    const r = await serverCall('POST', `/api/community/posts/${postId}/comments`, { content: content.trim(), parentId: parentCommentId ?? undefined })
+    await refreshServerPosts(slug)
+    return r
   },
-  async createPost(slug, { content, images, link, poll, projectId }) {
-    await wait(300)
-    const c = bySlug[slug]
-    const project = projectId ? seed.projects.find((p) => p.id === projectId) : null
-    let linkObj = null
-    if (link) { try { const u = new URL(link); linkObj = { url: link, domain: u.hostname.replace(/^www\./, ''), title: u.hostname.replace(/^www\./, ''), description: '' } } catch { throw new Error('That link doesn’t look valid.') } }
-    const post = {
-      id: `l-${Date.now()}`, communityId: c.id, authorId: 'me', likes: 0, createdAt: new Date().toISOString(), content: content.trim(), tags: [],
-      type: poll ? 'poll' : project ? 'project' : undefined,
-      images: images?.length ? images.map((src, i) => ({ src, alt: `Image ${i + 1} attached by ${state.user.name}` })) : undefined,
-      link: linkObj ?? undefined,
-      project: project ? { name: project.name, stage: project.stage, description: project.description, tech: project.tech } : undefined,
-      poll: poll ? { options: poll.map((label, i) => ({ id: `o${i}`, label, votes: 0 })) } : undefined,
-    }
-    patch({ posts: [post, ...state.posts] })
+  async createPost(slug, { content, link }) {
+    const r = await serverCall('POST', `/api/community/${slug}/posts`, { content: content.trim(), link: link || undefined })
+    await refreshServerPosts(slug)
+    return r
+  },
+  async report({ contentType, contentId, reason, details }) {
+    return serverCall('POST', '/api/community/reports', { contentType, contentId, reason, details: details || undefined })
   },
 }
+
+// ---------- welcome popup shown after a successful join ----------
+let welcomed = null // { community, name }
+const welcomeSubs = new Set()
+export const showWelcome = (community, name) => { welcomed = { community, name }; welcomeSubs.forEach((f) => f()) }
+export const closeWelcome = () => { welcomed = null; welcomeSubs.forEach((f) => f()) }
+export const useWelcome = () => useSyncExternalStore((f) => { welcomeSubs.add(f); return () => welcomeSubs.delete(f) }, () => welcomed, () => null)
+
+// ---------- house-rules agreement shown before a join completes ----------
+let agreement = null // { community, then }
+const agreeSubs = new Set()
+export const requestAgreement = (community, then) => { agreement = { community, then }; agreeSubs.forEach((f) => f()) }
+export const closeAgreement = () => { agreement = null; agreeSubs.forEach((f) => f()) }
+export const useAgreement = () => useSyncExternalStore((f) => { agreeSubs.add(f); return () => agreeSubs.delete(f) }, () => agreement, () => null)
 
 // ---------- auth + join flow ----------
 let authPrompt = null // { then }
@@ -178,7 +239,8 @@ export function useJoinFlow(community) {
   const joined = state.joined.includes(community.id)
   const doJoin = async (action) => {
     setPending('join')
-    try { await api.join(community.id) } finally { setPending(null) }
+    try { await api.join(community.id) } catch (e) { toast(e.message, { tone: 'error' }); setPending(null); return } finally { setPending(null) }
+    showWelcome(community, state.user?.name)
     action?.(state.user)
   }
   return {
@@ -186,7 +248,7 @@ export function useJoinFlow(community) {
     joined,
     pending,
     label: community.name,
-    join: (action) => (state.user ? doJoin(action) : requestSignIn(() => doJoin(action))),
+    join: (action) => { const ask = () => requestAgreement(community, () => doJoin(action)); return state.user ? ask() : requestSignIn(ask) },
     leave: async () => { setPending('leave'); try { await api.leave(community.id) } finally { setPending(null) } },
   }
 }
@@ -207,7 +269,10 @@ export function useQuery(key, fn, { enabled = true } = {}) {
   return { data, loading: enabled && !ready }
 }
 export const useCommunities = (opts) => useQuery(`dir:${opts.q}|${opts.category}|${opts.sort}`, () => listCommunities(opts))
-export const useCommunityPosts = (slug) => useQuery(`posts:${slug}`, () => listPosts(slug))
+export function useCommunityPosts(slug) {
+  useEffect(() => { refreshServerPosts(slug) }, [slug])
+  return useQuery(`posts:${slug}`, () => listPosts(slug))
+}
 export const useComments = (postId, enabled) => useQuery(`comments:${postId}`, () => listComments(postId), { enabled })
 export const useProjects = (slug, enabled = true) => useQuery(`projects:${slug}`, () => listProjects(slug), { enabled })
 export const useEvents = (slug) => useQuery(`events:${slug}`, () => listEvents(slug))

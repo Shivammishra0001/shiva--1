@@ -21,7 +21,7 @@ function Hero() {
   return (
     <section className="mk-hero section--dark" aria-labelledby="mk-title">
       <div className="mk-hero__frame">
-        <p className="mk-hero__brand">Market Push</p>
+        <p className="mk-hero__brand">Market place</p>
         <div className="mk-hero__disc" aria-hidden="true" />
         <div className="mk-hero__copy">
           <p className="mk-eyebrow">Projects • Innovation • Market readiness</p>
